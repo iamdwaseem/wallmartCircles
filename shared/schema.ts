@@ -36,7 +36,7 @@ export const messages = pgTable("messages", {
   circleId: integer("circle_id").references(() => circles.id).notNull(),
   userId: integer("user_id").references(() => users.id).notNull(),
   content: text("content").notNull(),
-  replyTo: integer("reply_to").references(() => messages.id),
+  replyTo: integer("reply_to"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -107,6 +107,7 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id, 
+      avatar: insertUser.avatar || null,
       createdAt: new Date() 
     };
     this.users.set(id, user);
@@ -128,6 +129,8 @@ export class MemStorage implements IStorage {
     const circle: Circle = { 
       ...insertCircle, 
       id, 
+      description: insertCircle.description || null,
+      budget: insertCircle.budget || null,
       spent: 0,
       createdAt: new Date() 
     };
@@ -169,7 +172,8 @@ export class MemStorage implements IStorage {
     const id = this.currentCircleMemberId++;
     const member: CircleMember = { 
       ...insertMember, 
-      id, 
+      id,
+      role: insertMember.role || "member",
       joinedAt: new Date() 
     };
     this.circleMembers.set(id, member);
@@ -206,7 +210,8 @@ export class MemStorage implements IStorage {
     const id = this.currentMessageId++;
     const message: Message = { 
       ...insertMessage, 
-      id, 
+      id,
+      replyTo: insertMessage.replyTo || null,
       createdAt: new Date() 
     };
     this.messages.set(id, message);
@@ -228,7 +233,9 @@ export class MemStorage implements IStorage {
     const id = this.currentCartItemId++;
     const item: CartItem = { 
       ...insertItem, 
-      id, 
+      id,
+      quantity: insertItem.quantity || 1,
+      assignedTo: insertItem.assignedTo || null,
       createdAt: new Date() 
     };
     this.cartItems.set(id, item);
@@ -300,7 +307,11 @@ export class MemStorage implements IStorage {
     const id = this.currentTaskId++;
     const task: Task = { 
       ...insertTask, 
-      id, 
+      id,
+      description: insertTask.description || null,
+      assignedTo: insertTask.assignedTo || null,
+      completed: insertTask.completed || false,
+      dueDate: insertTask.dueDate || null,
       createdAt: new Date() 
     };
     this.tasks.set(id, task);
@@ -331,7 +342,9 @@ export class MemStorage implements IStorage {
     const id = this.currentNotificationId++;
     const notification: Notification = { 
       ...insertNotification, 
-      id, 
+      id,
+      read: insertNotification.read || false,
+      circleId: insertNotification.circleId || null,
       createdAt: new Date() 
     };
     this.notifications.set(id, notification);
@@ -361,7 +374,8 @@ export class MemStorage implements IStorage {
     const id = this.currentCartHistoryId++;
     const history: CartHistory = { 
       ...insertHistory, 
-      id, 
+      id,
+      details: insertHistory.details || null,
       createdAt: new Date() 
     };
     this.cartHistory.set(id, history);

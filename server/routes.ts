@@ -7,6 +7,12 @@ import { hashPassword, generateToken, verifyToken } from "./auth";
 import { WebSocketManager } from "./websocket";
 import { insertUserSchema, insertCircleSchema, insertMessageSchema, insertCartItemSchema, insertTaskSchema } from "@shared/schema";
 
+interface JWTPayload {
+  userId: number;
+  email: string;
+  username: string;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Session configuration
   app.use(session({
@@ -26,7 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decoded = verifyToken(token);
+    const decoded = verifyToken(token) as JWTPayload;
     if (!decoded) {
       return res.status(401).json({ message: 'Invalid token' });
     }
