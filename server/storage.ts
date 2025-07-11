@@ -87,6 +87,29 @@ export class MemStorage implements IStorage {
     this.tasks = new Map();
     this.notifications = new Map();
     this.cartHistory = new Map();
+    
+    // Initialize with demo user
+    this.initializeDemoData();
+  }
+
+  private async initializeDemoData() {
+    // Create demo user with hashed password
+    const bcrypt = require('bcrypt');
+    const hashedPassword = await bcrypt.hash('password123', 10);
+    
+    const demoUser = {
+      id: 1,
+      username: 'demo',
+      email: 'demo@example.com',
+      password: hashedPassword,
+      firstName: 'Demo',
+      lastName: 'User',
+      avatar: null,
+      createdAt: new Date()
+    };
+    
+    this.users.set(1, demoUser);
+    this.currentUserId = 2;
   }
 
   // Users
