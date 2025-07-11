@@ -4,6 +4,7 @@ import {
   type Message, type InsertMessage, type CartItem, type InsertCartItem, type ItemVote, type InsertItemVote,
   type Task, type InsertTask, type Notification, type InsertNotification, type CartHistory, type InsertCartHistory
 } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -54,6 +55,351 @@ export interface IStorage {
   // Cart History
   getCartHistory(circleId: number): Promise<(CartHistory & { user: User })[]>;
   createCartHistory(history: InsertCartHistory): Promise<CartHistory>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const { db } = await import("./db");
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const { db } = await import("./db");
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const { db } = await import("./db");
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const { db } = await import("./db");
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...insertUser,
+        avatar: insertUser.avatar || null,
+      })
+      .returning();
+    return user;
+  }
+
+  async getCircle(id: number): Promise<Circle | undefined> {
+    const { db } = await import("./db");
+    const [circle] = await db.select().from(circles).where(eq(circles.id, id));
+    return circle || undefined;
+  }
+
+  async getCirclesByUserId(userId: number): Promise<Circle[]> {
+    const { db } = await import("./db");
+    const userCircles = await db
+      .select({
+        id: circles.id,
+        name: circles.name,
+        description: circles.description,
+        createdAt: circles.createdAt,
+        budget: circles.budget,
+        spent: circles.spent,
+        createdBy: circles.createdBy,
+      })
+      .from(circles)
+      .innerJoin(circleMembers, eq(circles.id, circleMembers.circleId))
+      .where(eq(circleMembers.userId, userId));
+    return userCircles;
+  }
+
+  async createCircle(insertCircle: InsertCircle): Promise<Circle> {
+    const { db } = await import("./db");
+    const [circle] = await db
+      .insert(circles)
+      .values({
+        ...insertCircle,
+        description: insertCircle.description || null,
+        budget: insertCircle.budget || null,
+        spent: 0,
+      })
+      .returning();
+    
+    // Add creator as admin
+    await this.addCircleMember({
+      circleId: circle.id,
+      userId: circle.createdBy,
+      role: "admin"
+    });
+    
+    return circle;
+  }
+
+  async updateCircle(id: number, updates: Partial<Circle>): Promise<Circle | undefined> {
+    const { db } = await import("./db");
+    const [circle] = await db
+      .update(circles)
+      .set(updates)
+      .where(eq(circles.id, id))
+      .returning();
+    return circle || undefined;
+  }
+
+  async getCircleMembers(circleId: number): Promise<(CircleMember & { user: User })[]> {
+    const { db } = await import("./db");
+    const members = await db
+      .select()
+      .from(circleMembers)
+      .innerJoin(users, eq(circleMembers.userId, users.id))
+      .where(eq(circleMembers.circleId, circleId));
+    
+    return members.map(m => ({
+      ...m.circle_members,
+      user: m.users
+    }));
+  }
+
+  async getUserCircleMembership(userId: number, circleId: number): Promise<CircleMember | undefined> {
+    const { db } = await import("./db");
+    const [member] = await db
+      .select()
+      .from(circleMembers)
+      .where(eq(circleMembers.userId, userId))
+      .where(eq(circleMembers.circleId, circleId));
+    return member || undefined;
+  }
+
+  async addCircleMember(insertMember: InsertCircleMember): Promise<CircleMember> {
+    const { db } = await import("./db");
+    const [member] = await db
+      .insert(circleMembers)
+      .values({
+        ...insertMember,
+        role: insertMember.role || "member",
+      })
+      .returning();
+    return member;
+  }
+
+  async removeCircleMember(userId: number, circleId: number): Promise<void> {
+    const { db } = await import("./db");
+    await db
+      .delete(circleMembers)
+      .where(eq(circleMembers.userId, userId))
+      .where(eq(circleMembers.circleId, circleId));
+  }
+
+  async getMessages(circleId: number, limit: number = 50): Promise<(Message & { user: User, replies?: (Message & { user: User })[] })[]> {
+    const { db } = await import("./db");
+    const messageList = await db
+      .select()
+      .from(messages)
+      .innerJoin(users, eq(messages.userId, users.id))
+      .where(eq(messages.circleId, circleId))
+      .orderBy(messages.createdAt)
+      .limit(limit);
+
+    return messageList.map(m => ({
+      ...m.messages,
+      user: m.users,
+      replies: []
+    }));
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const { db } = await import("./db");
+    const [message] = await db
+      .insert(messages)
+      .values({
+        ...insertMessage,
+        replyTo: insertMessage.replyTo || null,
+      })
+      .returning();
+    return message;
+  }
+
+  async getCartItems(circleId: number): Promise<(CartItem & { user: User, votes: ItemVote[], assignedUser?: User })[]> {
+    const { db } = await import("./db");
+    const items = await db
+      .select()
+      .from(cartItems)
+      .innerJoin(users, eq(cartItems.addedBy, users.id))
+      .where(eq(cartItems.circleId, circleId));
+
+    return items.map(item => ({
+      ...item.cart_items,
+      user: item.users,
+      votes: [],
+      assignedUser: undefined
+    }));
+  }
+
+  async createCartItem(insertItem: InsertCartItem): Promise<CartItem> {
+    const { db } = await import("./db");
+    const [item] = await db
+      .insert(cartItems)
+      .values({
+        ...insertItem,
+        quantity: insertItem.quantity || 1,
+        assignedTo: insertItem.assignedTo || null,
+      })
+      .returning();
+    return item;
+  }
+
+  async updateCartItem(id: number, updates: Partial<CartItem>): Promise<CartItem | undefined> {
+    const { db } = await import("./db");
+    const [item] = await db
+      .update(cartItems)
+      .set(updates)
+      .where(eq(cartItems.id, id))
+      .returning();
+    return item || undefined;
+  }
+
+  async deleteCartItem(id: number): Promise<void> {
+    const { db } = await import("./db");
+    await db.delete(cartItems).where(eq(cartItems.id, id));
+  }
+
+  async getItemVote(itemId: number, userId: number): Promise<ItemVote | undefined> {
+    const { db } = await import("./db");
+    const [vote] = await db
+      .select()
+      .from(itemVotes)
+      .where(eq(itemVotes.itemId, itemId))
+      .where(eq(itemVotes.userId, userId));
+    return vote || undefined;
+  }
+
+  async createItemVote(insertVote: InsertItemVote): Promise<ItemVote> {
+    const { db } = await import("./db");
+    const [vote] = await db
+      .insert(itemVotes)
+      .values(insertVote)
+      .returning();
+    return vote;
+  }
+
+  async updateItemVote(itemId: number, userId: number, voteValue: number): Promise<ItemVote | undefined> {
+    const { db } = await import("./db");
+    const [vote] = await db
+      .update(itemVotes)
+      .set({ vote: voteValue })
+      .where(eq(itemVotes.itemId, itemId))
+      .where(eq(itemVotes.userId, userId))
+      .returning();
+    return vote || undefined;
+  }
+
+  async deleteItemVote(itemId: number, userId: number): Promise<void> {
+    const { db } = await import("./db");
+    await db
+      .delete(itemVotes)
+      .where(eq(itemVotes.itemId, itemId))
+      .where(eq(itemVotes.userId, userId));
+  }
+
+  async getTasks(circleId: number): Promise<(Task & { assignedUser?: User, createdByUser: User })[]> {
+    const { db } = await import("./db");
+    const taskList = await db
+      .select()
+      .from(tasks)
+      .innerJoin(users, eq(tasks.createdBy, users.id))
+      .where(eq(tasks.circleId, circleId));
+
+    return taskList.map(t => ({
+      ...t.tasks,
+      createdByUser: t.users,
+      assignedUser: undefined
+    }));
+  }
+
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const { db } = await import("./db");
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        ...insertTask,
+        description: insertTask.description || null,
+        assignedTo: insertTask.assignedTo || null,
+        completed: insertTask.completed || false,
+        dueDate: insertTask.dueDate || null,
+      })
+      .returning();
+    return task;
+  }
+
+  async updateTask(id: number, updates: Partial<Task>): Promise<Task | undefined> {
+    const { db } = await import("./db");
+    const [task] = await db
+      .update(tasks)
+      .set(updates)
+      .where(eq(tasks.id, id))
+      .returning();
+    return task || undefined;
+  }
+
+  async deleteTask(id: number): Promise<void> {
+    const { db } = await import("./db");
+    await db.delete(tasks).where(eq(tasks.id, id));
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    const { db } = await import("./db");
+    const notificationList = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(notifications.createdAt);
+    return notificationList;
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const { db } = await import("./db");
+    const [notification] = await db
+      .insert(notifications)
+      .values({
+        ...insertNotification,
+        read: insertNotification.read || false,
+        circleId: insertNotification.circleId || null,
+      })
+      .returning();
+    return notification;
+  }
+
+  async markNotificationAsRead(id: number): Promise<void> {
+    const { db } = await import("./db");
+    await db
+      .update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.id, id));
+  }
+
+  async getCartHistory(circleId: number): Promise<(CartHistory & { user: User })[]> {
+    const { db } = await import("./db");
+    const history = await db
+      .select()
+      .from(cartHistory)
+      .innerJoin(users, eq(cartHistory.userId, users.id))
+      .where(eq(cartHistory.circleId, circleId));
+
+    return history.map(h => ({
+      ...h.cart_history,
+      user: h.users
+    }));
+  }
+
+  async createCartHistory(insertHistory: InsertCartHistory): Promise<CartHistory> {
+    const { db } = await import("./db");
+    const [history] = await db
+      .insert(cartHistory)
+      .values({
+        ...insertHistory,
+        details: insertHistory.details || null,
+      })
+      .returning();
+    return history;
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -406,4 +752,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
