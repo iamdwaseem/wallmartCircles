@@ -1,0 +1,126 @@
+Walmart Circle – Feature Enhancements (MERN + Socket.IO)
+Tech Stack:
+
+Frontend: React.js + Tailwind
+
+Backend: Node.js + Express
+
+DB: MongoDB
+
+Real-time: Socket.IO
+
+Auth: JWT + Passport.js
+
+✅ Feature Suggestions (MVP+)
+1. 🗳 Cart Item Voting
+Let users upvote/downvote items in the shared cart.
+
+Show vote counts per item
+
+Sync votes live via Socket.IO
+
+Store structure in MongoDB:
+
+js
+Copy
+Edit
+{
+  itemId: "abc123",
+  name: "Dove Soap",
+  votes: [{ userId: "xyz1", vote: 1 }]
+}
+2. 🧑‍💼 Member Roles & Permissions
+Introduce roles within each Circle:
+
+Admin: Can remove users, finalize checkout, lock budget
+
+Member: Can suggest items, vote, chat
+
+Embed roles in JWT payload:
+
+js
+Copy
+Edit
+{ userId: "...", role: "admin" }
+3. 💬 Threaded Chat
+Reply to specific messages in chat.
+
+Add replyTo: messageId field in MongoDB
+
+Frontend: display as nested reply under the original message
+
+4. 💸 Live Budget Tracker
+Track budget and spending in real-time.
+
+Budget vs Cart Total vs Remaining
+
+Use Socket.IO to update the UI for all members instantly
+
+5. 📅 Shopping Planner
+Add a planning section to the Circle:
+
+Create tasks (e.g., “Buy snacks by Saturday”)
+
+Set deadlines and reminders
+
+Optional: Use node-cron for backend alerts
+
+6. 🔔 In-App Notifications
+Real-time alerts when:
+
+New item is added
+
+Someone is assigned a task/item
+
+Budget is nearly exceeded
+
+Item gets majority votes
+Use Socket.IO rooms and emit to specific users
+
+7. 👤 Item Assignment
+Assign items to Circle members:
+
+“Waseem → Milk”, “Ali → Bread”
+
+MongoDB schema:
+
+js
+Copy
+Edit
+{
+  itemId: "123",
+  name: "Milk",
+  assignedTo: "userId_xyz"
+}
+8. 🏠 Multi-shipping Support
+Let users select different addresses for their assigned items.
+
+Final checkout splits cart by user
+
+Backend compiles grouped shipping summary
+
+9. 📜 Cart History (Audit Trail)
+Log all cart activity:
+
+Who added/removed what, and when
+
+MongoDB structure:
+
+js
+Copy
+Edit
+{
+  circleId: "...",
+  action: "removed",
+  item: "Soap",
+  user: "Waseem",
+  timestamp: "..."
+}
+10. 📊 Budget Analytics Dashboard
+Generate insights from cart activity:
+
+Total spent per member
+
+Top-voted items
+
+Visual breakdown with Chart.js or Recharts
