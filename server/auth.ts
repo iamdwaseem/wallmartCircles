@@ -3,7 +3,8 @@ import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
-import type { User } from "@shared/schema";
+import { supabase } from "./supabase";
+import type { User } from "./supabase";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
@@ -36,7 +37,7 @@ passport.serializeUser((user: any, done) => {
   done(null, user.id);
 });
 
-passport.deserializeUser(async (id: number, done) => {
+passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await storage.getUser(id);
     done(null, user);
@@ -73,4 +74,41 @@ export const hashPassword = async (password: string): Promise<string> => {
 
 export const comparePasswords = async (password: string, hashedPassword: string): Promise<boolean> => {
   return bcrypt.compare(password, hashedPassword);
+};
+
+// Supabase Auth integration
+export const createSupabaseUser = async (userData: {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  username: string;
+}): Promise<User> => {
+  // Create user in Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email: userData.email,
+    password: userData.password,
+    email_confirm: true,
+    user_metadata: {
+      first_name: userData.firstName,
+      last_name: userData.lastName,
+      username: userData.username
+    }
+  });
+
+  if (authError) throw authError;
+
+  // Create user profile in our users table
+  const hashedPassword = await hashPassword(userData.password);
+  const user = await storage.createUser({
+    id: authData.user.id,
+    email: userData.email,
+    password: hashedPassword,
+    first_name: userData.firstName,
+    last_name: userData.lastName,
+    username: userData.username,
+    avatar: null
+  });
+
+  return user;
 };

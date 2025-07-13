@@ -1,5 +1,5 @@
 export interface AuthUser {
-  id: number;
+  id: string;
   username: string;
   email: string;
   firstName: string;
@@ -13,7 +13,7 @@ export interface Circle {
   description?: string;
   budget: number;
   spent: number;
-  createdBy: number;
+  createdBy: string;
   createdAt: string;
   memberCount: number;
   onlineCount: number;
@@ -24,7 +24,7 @@ export interface Circle {
 export interface CircleMember {
   id: number;
   circleId: number;
-  userId: number;
+  userId: string;
   role: string;
   joinedAt: string;
   user: AuthUser;
@@ -33,7 +33,7 @@ export interface CircleMember {
 export interface Message {
   id: number;
   circleId: number;
-  userId: number;
+  userId: string;
   content: string;
   replyTo?: number;
   createdAt: string;
@@ -47,8 +47,8 @@ export interface CartItem {
   name: string;
   price: number;
   quantity: number;
-  addedBy: number;
-  assignedTo?: number;
+  addedBy: string;
+  assignedTo?: string;
   createdAt: string;
   user: AuthUser;
   assignedUser?: AuthUser;
@@ -58,7 +58,7 @@ export interface CartItem {
 export interface ItemVote {
   id: number;
   itemId: number;
-  userId: number;
+  userId: string;
   vote: number;
   createdAt: string;
 }
@@ -68,8 +68,8 @@ export interface Task {
   circleId: number;
   title: string;
   description?: string;
-  assignedTo?: number;
-  createdBy: number;
+  assignedTo?: string;
+  createdBy: string;
   completed: boolean;
   dueDate?: string;
   createdAt: string;
@@ -79,7 +79,7 @@ export interface Task {
 
 export interface Notification {
   id: number;
-  userId: number;
+  userId: string;
   circleId?: number;
   type: string;
   title: string;
@@ -89,7 +89,7 @@ export interface Notification {
 }
 
 export interface TypingUser {
-  userId: number;
+  userId: string;
   userName: string;
   isTyping: boolean;
 }

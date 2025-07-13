@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import type { Server } from "http";
 
 interface AuthenticatedWebSocket extends WebSocket {
-  userId?: number;
+  userId?: string;
   circleId?: number;
 }
 
@@ -16,8 +16,8 @@ interface WebSocketMessage {
 
 export class WebSocketManager {
   private wss: WebSocketServer;
-  private clients: Map<number, AuthenticatedWebSocket[]> = new Map(); // userId -> WebSocket[]
-  private circleRooms: Map<number, Set<number>> = new Map(); // circleId -> Set of userIds
+  private clients: Map<string, AuthenticatedWebSocket[]> = new Map(); // userId -> WebSocket[]
+  private circleRooms: Map<number, Set<string>> = new Map(); // circleId -> Set of userIds
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws' });
@@ -156,10 +156,10 @@ export class WebSocketManager {
     }
 
     const message = await storage.createMessage({
-      circleId: ws.circleId,
-      userId: ws.userId,
+      circle_id: ws.circleId,
+      user_id: ws.userId,
       content: data.content,
-      replyTo: data.replyTo
+      reply_to: data.replyTo || null
     });
 
     const user = await storage.getUser(ws.userId);
@@ -176,13 +176,14 @@ export class WebSocketManager {
     // Create notifications for other members
     const members = await storage.getCircleMembers(ws.circleId);
     for (const member of members) {
-      if (member.userId !== ws.userId) {
+      if (member.user_id !== ws.userId) {
         await storage.createNotification({
-          userId: member.userId,
-          circleId: ws.circleId,
+          user_id: member.user_id,
+          circle_id: ws.circleId,
           type: 'new_message',
           title: 'New message',
-          message: `${user?.firstName} ${user?.lastName} sent a message`
+          message: `${user?.first_name} ${user?.last_name} sent a message`,
+          read: false
         });
       }
     }
@@ -196,7 +197,7 @@ export class WebSocketManager {
     this.broadcastToCircle(ws.circleId, {
       type: 'typing',
       userId: ws.userId,
-      userName: `${user?.firstName} ${user?.lastName}`,
+      userName: `${user?.first_name} ${user?.last_name}`,
       isTyping: data.isTyping
     }, ws.userId);
   }
@@ -217,8 +218,8 @@ export class WebSocketManager {
     } else {
       // Create new vote
       await storage.createItemVote({
-        itemId: data.itemId,
-        userId: ws.userId,
+        item_id: data.itemId,
+        user_id: ws.userId,
         vote: data.vote
       });
     }
@@ -236,27 +237,28 @@ export class WebSocketManager {
     if (!ws.userId || !ws.circleId) return;
 
     const item = await storage.createCartItem({
-      circleId: ws.circleId,
+      circle_id: ws.circleId,
       name: data.name,
-      price: data.price,
+      price: Math.round(data.price * 100), // Convert to cents
       quantity: data.quantity || 1,
-      addedBy: ws.userId
+      added_by: ws.userId,
+      assigned_to: null
     });
 
     // Add to cart history
     await storage.createCartHistory({
-      circleId: ws.circleId,
-      userId: ws.userId,
+      circle_id: ws.circleId,
+      user_id: ws.userId,
       action: 'added',
-      itemName: data.name,
-      details: { price: data.price, quantity: data.quantity || 1 }
+      item_name: data.name,
+      details: { price: Math.round(data.price * 100), quantity: data.quantity || 1 }
     });
 
     // Update circle spent amount
     const circle = await storage.getCircle(ws.circleId);
     if (circle) {
       await storage.updateCircle(ws.circleId, {
-        spent: circle.spent + (data.price * (data.quantity || 1))
+        spent: circle.spent + (Math.round(data.price * 100) * (data.quantity || 1))
       });
     }
 
@@ -273,13 +275,14 @@ export class WebSocketManager {
     // Create notifications
     const members = await storage.getCircleMembers(ws.circleId);
     for (const member of members) {
-      if (member.userId !== ws.userId) {
+      if (member.user_id !== ws.userId) {
         await storage.createNotification({
-          userId: member.userId,
-          circleId: ws.circleId,
+          user_id: member.user_id,
+          circle_id: ws.circleId,
           type: 'item_added',
           title: 'New item added',
-          message: `${user?.firstName} ${user?.lastName} added ${data.name} to the cart`
+          message: `${user?.first_name} ${user?.last_name} added ${data.name} to the cart`,
+          read: false
         });
       }
     }
@@ -330,7 +333,7 @@ export class WebSocketManager {
     }
   }
 
-  private broadcastToCircle(circleId: number, message: any, excludeUserId?: number) {
+  private broadcastToCircle(circleId: number, message: any, excludeUserId?: string) {
     const circleUsers = this.circleRooms.get(circleId);
     if (!circleUsers) return;
 
@@ -349,7 +352,7 @@ export class WebSocketManager {
     }
   }
 
-  public broadcastToUser(userId: number, message: any) {
+  public broadcastToUser(userId: string, message: any) {
     const userClients = this.clients.get(userId);
     if (userClients) {
       const messageStr = JSON.stringify(message);

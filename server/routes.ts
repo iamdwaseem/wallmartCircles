@@ -3,12 +3,11 @@ import { createServer, type Server } from "http";
 import passport from "passport";
 import session from "express-session";
 import { storage } from "./storage";
-import { hashPassword, generateToken, verifyToken } from "./auth";
+import { hashPassword, generateToken, verifyToken, createSupabaseUser } from "./auth";
 import { WebSocketManager } from "./websocket";
-import { insertUserSchema, insertCircleSchema, insertMessageSchema, insertCartItemSchema, insertTaskSchema } from "@shared/schema";
 
 interface JWTPayload {
-  userId: number;
+  userId: string;
   email: string;
   username: string;
 }
@@ -44,21 +43,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post('/api/auth/register', async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
+      const { username, email, password, firstName, lastName } = req.body;
       
       // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: 'User already exists' });
       }
 
-      // Hash password
-      const hashedPassword = await hashPassword(userData.password);
-      
-      // Create user
-      const user = await storage.createUser({
-        ...userData,
-        password: hashedPassword
+      // Create user with Supabase Auth
+      const user = await createSupabaseUser({
+        email,
+        password,
+        firstName,
+        lastName,
+        username
       });
 
       // Generate token
@@ -69,8 +68,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: user.id,
           username: user.username,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.first_name,
+          lastName: user.last_name,
           avatar: user.avatar
         },
         token
@@ -103,8 +102,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: user.id,
           username: user.username,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.first_name,
+          lastName: user.last_name,
           avatar: user.avatar
         },
         token
@@ -126,8 +125,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: user.id,
         username: user.username,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.first_name,
+        lastName: user.last_name,
         avatar: user.avatar
       });
     } catch (error) {
@@ -160,12 +159,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/circles', requireAuth, async (req, res) => {
     try {
-      const circleData = insertCircleSchema.parse({
-        ...req.body,
-        createdBy: req.user.userId
+      const { name, description, budget } = req.body;
+      
+      const circle = await storage.createCircle({
+        name,
+        description,
+        budget: budget ? Math.round(budget * 100) : null, // Convert to cents
+        created_by: req.user.userId
       });
-
-      const circle = await storage.createCircle(circleData);
+      
       res.json(circle);
     } catch (error) {
       res.status(400).json({ message: 'Invalid circle data' });
@@ -210,8 +212,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.addCircleMember({
-        circleId,
-        userId: req.user.userId,
+        circle_id: circleId,
+        user_id: req.user.userId,
         role: 'member'
       });
 
@@ -242,13 +244,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/circles/:id/messages', requireAuth, async (req, res) => {
     try {
       const circleId = parseInt(req.params.id);
-      const messageData = insertMessageSchema.parse({
-        ...req.body,
-        circleId,
-        userId: req.user.userId
+      const { content, replyTo } = req.body;
+
+      const message = await storage.createMessage({
+        circle_id: circleId,
+        user_id: req.user.userId,
+        content,
+        reply_to: replyTo || null
       });
 
-      const message = await storage.createMessage(messageData);
       res.json(message);
     } catch (error) {
       res.status(400).json({ message: 'Invalid message data' });
@@ -276,21 +280,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/circles/:id/cart', requireAuth, async (req, res) => {
     try {
       const circleId = parseInt(req.params.id);
-      const itemData = insertCartItemSchema.parse({
-        ...req.body,
-        circleId,
-        addedBy: req.user.userId
-      });
+      const { name, price, quantity } = req.body;
 
-      const item = await storage.createCartItem(itemData);
+      const item = await storage.createCartItem({
+        circle_id: circleId,
+        name,
+        price: Math.round(price * 100), // Convert to cents
+        quantity: quantity || 1,
+        added_by: req.user.userId,
+        assigned_to: null
+      });
       
       // Add to cart history
       await storage.createCartHistory({
-        circleId,
-        userId: req.user.userId,
+        circle_id: circleId,
+        user_id: req.user.userId,
         action: 'added',
-        itemName: itemData.name,
-        details: { price: itemData.price, quantity: itemData.quantity }
+        item_name: name,
+        details: { price: Math.round(price * 100), quantity: quantity || 1 }
       });
 
       res.json(item);
@@ -338,13 +345,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/circles/:id/tasks', requireAuth, async (req, res) => {
     try {
       const circleId = parseInt(req.params.id);
-      const taskData = insertTaskSchema.parse({
-        ...req.body,
-        circleId,
-        createdBy: req.user.userId
+      const { title, description, assignedTo, dueDate } = req.body;
+
+      const task = await storage.createTask({
+        circle_id: circleId,
+        title,
+        description: description || null,
+        assigned_to: assignedTo || null,
+        created_by: req.user.userId,
+        completed: false,
+        due_date: dueDate || null
       });
 
-      const task = await storage.createTask(taskData);
       res.json(task);
     } catch (error) {
       res.status(400).json({ message: 'Invalid task data' });
